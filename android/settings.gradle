@@ -1,0 +1,3 @@
+rootProject.name = 'yunApp'
+
+include ':app'
