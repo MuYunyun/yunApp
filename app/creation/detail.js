@@ -408,9 +408,7 @@ var Detail = React.createClass({
 	        	/>
 
 	        	<Modal       //评论浮层
-	        		animationType={'fade'}  // 浮层出现形式
-	        		visible={this.state.modalVisible}   //是否可见   
-	        		onRequestClose={() => {this._setModalVisible(false)}}>  
+	        		visible={this.state.modalVisible}>   
 	        		<View style={styles.modalContainer}>
 	        			<Icon
 	        				onPress={this._closeModal}
