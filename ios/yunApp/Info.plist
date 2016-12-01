@@ -3,7 +3,9 @@
 <plist version="1.0">
   <dict>
     <key>CFBundleDevelopmentRegion</key>
-    <string>en</string>
+    <string>zh_CN</string> <!-- 配置设备语言 -->
+    <key>CFBundleDisplayName</key>
+    <string>云瓣</string>  <!-- App名称 -->
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>

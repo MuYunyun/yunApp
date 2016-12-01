@@ -12,6 +12,7 @@ var Video = require('react-native-video').default; //视频组件
 var Button = require('react-native-button'); // 按钮组件
 var request = require('../common/request');
 var config = require('../common/config');
+var util = require('../common/util');
 
 var StyleSheet = ReactNative.StyleSheet;
 var Text = ReactNative.Text;
@@ -23,6 +24,7 @@ var Image = ReactNative.Image; //引人图片
 var Modal = ReactNative.Modal; //浮出评论弹框
 var AlertIOS = ReactNative.AlertIOS; //浮出评论弹框
 var ActivityIndicator = ReactNative.ActivityIndicator; //加载的动画
+var AsyncStorage = ReactNative.AsyncStorage;
 var TextInput = ReactNative.TextInput; //评论输入框
 
 var width = Dimensions.get('window').width;
@@ -144,7 +146,24 @@ var Detail = React.createClass({
 	},
 
 	componentDidMount() { // 等视频都加载好后请求评论
-		this._fetchData()
+		var that = this;
+
+		AsyncStorage.getItem('user') //获取本地存着的user
+			.then((data) => {
+				var user
+
+				if (data) {
+					user = JSON.parse(data)
+				}
+
+				if (user && user.accessToken) {
+					that.setState({
+						user: user
+					}, function() {
+						that._fetchData(1); //默认获取第一页的数据
+					})
+				}
+			})
 	},
 
 	_fetchData(page) { //获取第几页的数据
@@ -155,24 +174,28 @@ var Detail = React.createClass({
 		})
 
 		request.get(config.api.base + config.api.comment, {
-				accessToken: 'abcdef',
-				creation: 124,
+				accessToken: this.state.user.accessToken,
+				creation: this.state.data._id,
 				page: page
 			})
 			.then((data) => {
-				if (data.success) {
-					var items = cachedResults.items.slice(); //复制当前数组
+				if (data && data.success) {
+					if (data.data.length > 0) {
+						var items = cachedResults.items.slice(); //复制当前数组
 
-					items = items.concat(data.data);
-					cachedResults.nextPage += 1;
-					cachedResults.items = items;
-					cachedResults.total = data.total;
+						items = items.concat(data.data);
+						cachedResults.nextPage += 1;
+						cachedResults.items = items;
+						cachedResults.total = data.total;
 
-					that.setState({
-						isLoadingTail: false, //请求结束
-						dataSource: that.state.dataSource.cloneWithRows(cachedResults.items)
-					})
+						that.setState({
+							isLoadingTail: false, //请求结束
+							dataSource: that.state.dataSource.cloneWithRows(cachedResults.items)
+						})
+					}
 				}
+
+
 			})
 			.catch((error) => {
 				this.setState({
@@ -215,7 +238,7 @@ var Detail = React.createClass({
 	_renderRow(row) {
 		return ( // 返回每条视图的模板
 			<View key={row._id} style={styles.replyBox}>
-				<Image style={styles.replyAvatar} source={{uri: row.replyBy.avatar}} />
+				<Image style={styles.replyAvatar} source={{uri: util.avatar(row.replyBy.avatar)}} />
 	        	<View style={styles.reply}>
 	        		<Text style={styles.replyNickname}>{row.replyBy.nickname}</Text>
 	        		<Text style={styles.replyTitle}>{row.content}</Text>
@@ -248,7 +271,7 @@ var Detail = React.createClass({
 		return (
 			<View style={styles.listHeader}>
 				<View style={styles.infoBox}>
-		        	<Image style={styles.avatar} source={{uri: data.author.avatar}} />
+		        	<Image style={styles.avatar} source={{uri: util.avatar(data.author.avatar)}} />
 		        	<View style={styles.descBox}>
 		        		<Text style={styles.nickname}>{data.author.nickname}</Text>
 		        		<Text style={styles.title}>{data.title}</Text>
@@ -286,9 +309,11 @@ var Detail = React.createClass({
 			isSending: true
 		}, function() {
 			var body = {
-				accessToken: 'abc',
-				creation: '1323', //评论哪个视频
-				content: this.state.content //提交的内容
+				accessToken: this.state.user.accessToken,
+				comment: {
+					creation: this.state.data._id, //评论哪个视频
+					content: this.state.content //提交的内容
+				}
 			}
 
 			var url = config.api.base + config.api.comment;
@@ -300,14 +325,7 @@ var Detail = React.createClass({
 						var items = cachedResults.items.slice();
 						var content = that.state.content;
 
-						items = [{
-							content: content,
-							replyBy: {
-								avatar: 'http://dummyimage.com/640x640/20d79d)',
-								nickname: '狗狗狗说'
-							}
-						}].concat(items)
-
+						items = data.data.concat(items);
 						cachedResults.items = items;
 						cachedResults.total = cachedResults.total + 1;
 
@@ -332,7 +350,7 @@ var Detail = React.createClass({
 	},
 
 	render() {
-		var data = this.props.data;
+		var data = this.props.data; //从index.js通过index.ios.js传进来的
 		return (
 			<View style={styles.container}>
 				<View style={styles.header}>
@@ -345,7 +363,7 @@ var Detail = React.createClass({
 		        <View style={styles.videoBox}>
 		        	<Video
 		        		ref='videoPlayer'   //相当于对这个组件的引用
-		        		source={{uri: data.video}}
+		        		source={{uri: util.video(data.qiniu_video)}}
 		        		style={styles.video}
 		        		volumn={1}  //声音放大倍数
 		        		paused={this.state.paused}   //是否暂停

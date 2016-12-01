@@ -11,6 +11,7 @@ var Icon = require('react-native-vector-icons/Ionicons');
 
 var request = require('../common/request');
 var config = require('../common/config');
+var util = require('../common/util');
 var Detail = require('./detail');
 
 var StyleSheet = ReactNative.StyleSheet;
@@ -23,6 +24,7 @@ var Dimensions = ReactNative.Dimensions; //获取可视区宽度的模块
 var ActivityIndicator = ReactNative.ActivityIndicator; //加载的动画
 var RefreshControl = ReactNative.RefreshControl; //下拉加载的动画
 var AlertIOS = ReactNative.AlertIOS; //加载的动画
+var AsyncStorage = ReactNative.AsyncStorage;
 
 var width = Dimensions.get('window').width;
 
@@ -35,15 +37,15 @@ var cachedResults = { //缓存列表中的数据,这样就不会重复加载
 var Item = React.createClass({
 	getInitialState() {
 		var row = this.props.row;
+
 		return {
-			//up: row.voted, //点赞
+			up: row.voted, //点赞
 			row: row
 		}
 	},
 
 	_up() {
 		var that = this;
-		console.log(this.state);
 		var up = !this.state.up; // 点击以后的状态
 		var row = this.state.row; //数据
 		var url = config.api.base + config.api.up;
@@ -51,11 +53,12 @@ var Item = React.createClass({
 		var body = { //发到接口上的请求
 			id: row._id,
 			up: up ? 'yes' : 'no',
-			accessToken: 'abcdef'
+			accessToken: this.props.user.accessToken
 		}
 
 		request.post(url, body)
 			.then(function(data) {
+				console.log(data);
 				if (data && data.success) {
 					that.setState({
 						up: up
@@ -72,38 +75,39 @@ var Item = React.createClass({
 
 	render() {
 		var row = this.state.row;
+
 		return (
 			<TouchableHighlight onPress={this.props.onSelect}>
-						<View style={styles.item}>
-							<Text style={styles.title}>{row.title}</Text>
-							<Image 
-								source={{uri: row.thumb}}
-								style={styles.thumb}
-							>
-								<Icon
-									name='ios-play'
-									size={28}
-									style={styles.play} />	
-							</Image>
-							<View style={styles.itemFooter}>
-								<View style={styles.handleBox}>
-									<Icon
-										name={this.state.up ?'ios-heart' : 'ios-heart-outline'}
-										size={28}
-										onPress={this._up}
-										style={this.state.up ? styles.up : styles.down} />
-									<Text style={styles.handleText} onPress={this._up}>喜欢</Text>	
-								</View>
-								<View style={styles.handleBox}>
-									<Icon
-										name='ios-chatboxes-outline'
-										size={28}
-										style={styles.commentIcon} />
-									<Text style={styles.handleText}>评论</Text>	
-								</View>
-							</View>					
+				<View style={styles.item}>
+					<Text style={styles.title}>{row.title}</Text>
+					<Image 
+						source={{uri: util.thumb(row.qiniu_thumb)}}
+						style={styles.thumb}
+					>
+						<Icon
+							name='ios-play'
+							size={28}
+							style={styles.play} />	
+					</Image>
+					<View style={styles.itemFooter}>
+						<View style={styles.handleBox}>
+							<Icon
+								name={this.state.up ?'ios-heart' : 'ios-heart-outline'}
+								size={28}
+								onPress={this._up}
+								style={this.state.up ? styles.up : styles.down} />
+							<Text style={styles.handleText} onPress={this._up}>喜欢</Text>	
 						</View>
-					</TouchableHighlight>
+						<View style={styles.handleBox}>
+							<Icon
+								name='ios-chatboxes-outline'
+								size={28}
+								style={styles.commentIcon} />
+							<Text style={styles.handleText}>评论</Text>	
+						</View>
+					</View>					
+				</View>
+			</TouchableHighlight>
 		)
 	}
 })
@@ -122,13 +126,31 @@ var List = React.createClass({
 
 	_renderRow(row) {
 		return <Item 
-			key={row._id} 
+			key={row._id}
+			user={this.state.user} 
 			onSelect={() => this._loadPage(row)} 
 			row={row} /> //把子组件抽离出来
 	},
 
 	componentDidMount() {
-		this._fetchData(1); //默认获取第一页的数据
+		var that = this;
+
+		AsyncStorage.getItem('user') //获取本地存着的user
+			.then((data) => {
+				var user
+
+				if (data) {
+					user = JSON.parse(data)
+				}
+
+				if (user && user.accessToken) {
+					that.setState({
+						user: user
+					}, function() {
+						that._fetchData(1); //默认获取第一页的数据
+					})
+				}
+			})
 	},
 
 	_fetchData(page) { //获取第几页的数据
@@ -144,25 +166,39 @@ var List = React.createClass({
 			})
 		}
 
+		var user = this.state.user;
 		request.get(config.api.base + config.api.creations, {
-				accessToken: 'abcdef',
+				accessToken: user.accessToken,
 				page: page
 			})
 			.then((data) => {
-				if (data.success) {
-					var items = cachedResults.items.slice(); //复制当前数组
+				if (data && data.success) {
+					if (data.data.length > 0) {
 
-					if (page !== 0) {
-						items = items.concat(data.data);
-						cachedResults.nextPage += 1;
-					} else {
-						items = data.data.concat(items);
-					}
+						data.data.map(function(item) {
+							var votes = item.votes || [];
 
-					cachedResults.items = items;
-					cachedResults.total = data.total;
+							if (votes.indexOf(user._id) > -1) { //说明该视频是当前登录用户点过赞的
+								item.voted = true;
+							} else {
+								item.voted = false;
+							}
 
-					setTimeout(function() {
+							return item
+						})
+
+						var items = cachedResults.items.slice(); //复制当前数组
+
+						if (page !== 0) {
+							items = items.concat(data.data);
+							cachedResults.nextPage += 1;
+						} else {
+							items = data.data.concat(items);
+						}
+
+						cachedResults.items = items;
+						cachedResults.total = data.total;
+
 						if (page !== 0) {
 							that.setState({
 								isLoadingTail: false, //请求结束
@@ -174,7 +210,7 @@ var List = React.createClass({
 								dataSource: that.state.dataSource.cloneWithRows(cachedResults.items)
 							})
 						}
-					}, 20)
+					}
 				}
 			})
 			.catch((error) => {
@@ -226,7 +262,7 @@ var List = React.createClass({
 			return <View style={styles.loadingMore} />
 		}
 
-		return <ActivityIndicator style={styles.loadingMore}/> //展现小菊花这里有bug
+		return <ActivityIndicator style={styles.loadingMore}/> //展现小菊花
 	},
 
 	_loadPage(row) { //导航器

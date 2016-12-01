@@ -42,15 +42,6 @@ var photoOptions = { // react-native-image-picker文档里的一些配置
 	}
 };
 
-var CLOUDINARY = {
-	cloud_name: 'yunyun',
-	api_key: '437996579139555',
-	api_secret: 'UCjCrHqTsb7ZcysqGiPnFVAUCrs',
-	base: 'http://res.cloudinary.com/yunyun', //基础地址
-	image: 'https://api.cloudinary.com/v1_1/yunyun/image/upload', //上传图片地址
-	video: 'https://api.cloudinary.com/v1_1/yunyun/video/upload', //上传视频地址
-	audio: 'https://api.cloudinary.com/v1_1/yunyun/raw/upload', //上传音频地址
-}
 
 function avatar(id, type) { //生成一个cloudinary图床图片地址
 	if (id.indexOf('http') > -1) {
@@ -61,7 +52,11 @@ function avatar(id, type) { //生成一个cloudinary图床图片地址
 		return id
 	}
 
-	return CLOUDINARY.base + '/' + type + '/upload/' + id
+	if (id.indexOf('avatar/') > -1) { // cloudinary图床
+		return config.cloudinary.base + '/' + type + '/upload/' + id
+	}
+
+	return 'http://oh87gl620.bkt.clouddn.com/' + id //七牛云测试地址
 }
 
 var Account = React.createClass({
@@ -70,7 +65,7 @@ var Account = React.createClass({
 
 		return {
 			user: user,
-			//avatarProgress: 0 //上传图片进度值
+			avatarProgress: 0, //上传图片进度值
 			avatarUploading: false, //没有上传的
 			modalVisible: false // 编辑的浮层默认不显示
 		}
@@ -110,6 +105,20 @@ var Account = React.createClass({
 			})
 	},
 
+	_getQiniuToken() {
+		var accessToken = this.state.user.accessToken;
+		var signatureURL = config.api.base + config.api.signature;
+
+		return request.post(signatureURL, {
+				accessToken: accessToken,
+				type: 'avatar', //上传种类是图像
+				cloud: 'qiniu' //证明是请求七牛
+			})
+			.catch((err) => {
+				console.log(err);
+			})
+	},
+
 	_pickPhoto() { //打开相机
 		var that = this;
 
@@ -119,52 +128,69 @@ var Account = React.createClass({
 			}
 
 			var avartarData = 'data:image/jpeg;base64,' + res.data;
-			var timestamp = Date.now();
-			var tags = 'app,avatar'; //对要上传的图片加个Tag
-			var folder = 'avatar'; //要传到图床下哪个文件下面
-			var signatureURL = config.api.base + config.api.signature;
-			var accessToken = this.state.user.accessToken;
+			var uri = res.uri;
+			//console.log('uri是' + uri);
 
-			request.post(signatureURL, {
-					accessToken: accessToken,
-					timestamp: timestamp,
-					folder: folder,
-					tags: tags,
-					type: 'avatar'
-				})
-				.catch((err) => {
-					console.log(err);
-				})
+			that._getQiniuToken()
 				.then((data) => {
 					if (data && data.success) {
-						var signature = 'folder=' + folder + '&tags=' + tags + '&timestamp=' + timestamp + CLOUDINARY.api_secret;
-
-						signature = sha1(signature);
-
+						var token = data.data.token;
+						var key = data.data.key;
 						var body = new FormData(); //发起表单请求
 
-						body.append('folder', folder);
-						body.append('signature', signature); //签名值
-						body.append('tags', tags);
-						body.append('timestamp', timestamp);
-						body.append('api_key', CLOUDINARY.api_key);
-						body.append('resource_type', 'image');
-						body.append('file', avartarData);
+						body.append('token', token); //签名值
+						body.append('key', key);
+						body.append('file', {
+							type: 'image/jpeg',
+							uri: uri,
+							name: key
+						});
 
 						that._upload(body); //异步提交
 					}
 				})
+
+
+			// request.post(signatureURL, {
+			// 		accessToken: accessToken,
+			// 		key: key,
+			// 		timestamp: timestamp,
+			// 		type: 'avatar'
+			// 	})
+			// 	.catch((err) => {
+			// 		console.log(err);
+			// 	})
+			// 	.then((data) => {
+			// 		if (data && data.success) {
+
+			// 			var signature = data.data;
+
+			// 			var body = new FormData(); //发起表单请求
+
+			// 			body.append('folder', folder);
+			// 			body.append('signature', signature); //签名值
+			// 			body.append('tags', tags);
+			// 			body.append('timestamp', timestamp);
+			// 			body.append('api_key', config.cloudinary.api_key);
+			// 			body.append('resource_type', 'image');
+			// 			body.append('file', avartarData);
+
+			// 			that._upload(body); //异步提交
+			// 		}
+			// 	})
 		})
 	},
 
 	_upload(body) { // 异步请求
 		var that = this;
 		var xhr = new XMLHttpRequest();
-		var url = CLOUDINARY.image; //图床地址
+		var url = config.qiniu.upload;
+
+		//console.log(body);
 
 		this.setState({
 			avatarUploading: true, //设置为上传状态
-			//avatarProgress: 0 //上传多次的话每次重置为0
+			avatarProgress: 0 //上传多次的话每次重置为0
 		})
 
 		xhr.open('POST', url);
@@ -191,16 +217,25 @@ var Account = React.createClass({
 				console.log('parse fails');
 			}
 
-			if (response && response.public_id) { //public_id是返回图片ID
+			console.log(response);
+
+			if (response) {
 				var user = this.state.user;
 
-				user.avatar = response.public_id;
+				if (response.public_id) { //public_id是cloudinary图床返回图片ID
+					user.avatar = response.public_id;
+				}
+
+				if (response.key) { //七牛云返回图片
+					user.avatar = response.key;
+				}
 
 				that.setState({
 					avatarUploading: false, //设置上传状态结束
-					//avatarProgress: 0,
+					avatarProgress: 0,
 					user: user
 				})
+
 				that._asyncUser(true); // 同步用户的信息
 			}
 		}
@@ -211,7 +246,7 @@ var Account = React.createClass({
 					var percent = Number((event.loaded / event.total).toFixed(2))
 
 					that.setState({
-						//avatarProgress: percent
+						avatarProgress: percent
 					})
 				}
 			}
@@ -259,8 +294,8 @@ var Account = React.createClass({
 		this._asyncUser();
 	},
 
-	_logout() {  // 退出登录(把本地资料清空，同时改变APP的登录状态)
-		this.props.logout();    //通过这种方式，调用上层组件的登出方法
+	_logout() { // 退出登录(把本地资料清空，同时改变APP的登录状态)
+		this.props.logout(); //通过这种方式，调用上层组件的登出方法
 	},
 
 	render() {
@@ -280,14 +315,14 @@ var Account = React.createClass({
 							<View style={styles.avatarBox}>
 								{
 									this.state.avatarUploading //根据判断是否上传中
-									? <Image
-										source={{uri: avatar(user.avatar, 'image')}}
-										style={styles.avatar} /> 
-									//<Progress.Circle    // // 这个地方有坑
-									// 	showsText={true} //是否显示文本
-									// 	size={75} 
-									// 	color={'#ee735c'}
-									// 	progress={this.state.avatarProgress} /> //上传比例系数
+									? <Progress.Circle    // // 这个地方有坑
+										showsText={true} //是否显示文本
+										size={75} 
+										color={'#ee735c'}
+										progress = {
+											this.state.avatarProgress
+										}
+										/> // 上传比例系数
 									: <Image
 										source={{uri: avatar(user.avatar, 'image')}}
 										style={styles.avatar} />
@@ -301,14 +336,11 @@ var Account = React.createClass({
 						<View style={styles.avatarBox}>
 							{
 								this.state.avatarUploading //根据判断是否上传中
-								 ? <Icon
-									name='ios-cloud-upload-outline'
-									style={styles.plusIcon} />
-								//<Progress.Circle 
-								// 	showsText={true} //是否显示文本
-								// 	size={75} 
-								// 	color={'#ee735c'}
-								// 	progress={this.state.avatarProgress} /> //上传比例系数
+								 ? <Progress.Circle 
+									showsText={true} //是否显示文本
+									size={75} 
+									color={'#ee735c'}
+									progress={this.state.avatarProgress} /> //上传比例系数
 								: <Icon
 									name='ios-cloud-upload-outline'
 									style={styles.plusIcon} />
@@ -399,9 +431,9 @@ var Account = React.createClass({
 				</Modal>
 				
 				<Button
-		style = {
-			styles.btn
-		}
+					style = {
+						styles.btn
+					}
 					onPress={this._logout}>退出登录</Button>
       		</View>
 		)
