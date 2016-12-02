@@ -1,9 +1,9 @@
 # 基于RN开发的一款视频配音APP
-
+-----
 APP效果:
 -------
 
-<img src="http://oegv7uazl.bkt.clouddn.com/show.gif" width="66%" height="33%" height="700" alt="效果展示"/>
+<a href="http://oegv7uazl.bkt.clouddn.com/show.gif">☁️动态效果展示☁️</a>
 
 <img src="http://oegv7uazl.bkt.clouddn.com/%E8%BD%AE%E6%92%AD%E5%9B%BE.png" width="33%" height="33%" float"left" height="700" alt="效果展示"/>
 &nbsp;<img src="http://oegv7uazl.bkt.clouddn.com/message.jpeg" width="33%" height="33%" float"left" height="700" alt="效果展示"/>
