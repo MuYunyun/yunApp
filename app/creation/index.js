@@ -172,6 +172,7 @@ var List = React.createClass({
 				page: page
 			})
 			.then((data) => {
+				console.log(data);
 				if (data && data.success) {
 					if (data.data.length > 0) {
 
@@ -195,6 +196,8 @@ var List = React.createClass({
 						} else {
 							items = data.data.concat(items);
 						}
+
+						console.log(items);
 
 						cachedResults.items = items;
 						cachedResults.total = data.total;

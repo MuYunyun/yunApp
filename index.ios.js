@@ -42,7 +42,7 @@ var yunApp = React.createClass({
 
   //路口文件安装之后没有展现里面子页面的时候需要读取里面存储的数据
   componentDidMount() {
-    //AsyncStorage.removeItem('enterd');
+    //AsyncStorage.removeItem('entered');
     this._asyncAppStatus()
   },
 

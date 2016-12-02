@@ -483,7 +483,8 @@ var styles = StyleSheet.create({
 		borderColor: '#ee753c',
 		borderRadius: 4,
 		fontSize: 18,
-		color: '#ee753c'
+		color: '#ee753c',
+		marginLeft: 10
 	},
 
 	header: {
